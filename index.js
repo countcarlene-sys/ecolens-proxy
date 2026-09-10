@@ -9,7 +9,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Cole a sua chave oficial da Pl@ntNet aqui no servidor (ela fica segura na nuvem, longe do app)
 const PLANTNET_API_KEY = '2b10LrhtbpJCYLimoPBT2lzSu'; 
 
-app.post('/identify', upload.single('image'), async (req, res) => {
+app.post('/identify', upload.single('images'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Nenhuma imagem enviada.' });
