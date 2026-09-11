@@ -2,12 +2,17 @@ const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
+const { GoogleGenAI } = require('@google/genai');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Cole a sua chave oficial da Pl@ntNet aqui no servidor (ela fica segura na nuvem, longe do app)
 const PLANTNET_API_KEY = '2b10dr8hlBbcNHFcHzzYGm9HR'; 
+
+// Chave e configuração do Google Gemini
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 app.post('/identify', upload.single('images'), async (req, res) => {
   try {
@@ -38,6 +43,41 @@ app.post('/identify', upload.single('images'), async (req, res) => {
     res.status(500).json({ 
       error: 'Erro ao comunicar com a Pl@ntNet', 
       details: error.response?.data || error.message 
+    });
+  }
+});
+
+// Nova rota para análise de poluição hídrica/ambiental via Gemini
+app.post('/pollution', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhuma imagem enviada.' });
+    }
+
+    const imagePart = {
+      inlineData: {
+        data: req.file.buffer.toString('base64'),
+        mimeType: req.file.mimetype,
+      },
+    };
+
+    const prompt = `Analise esta imagem focando em recursos hídricos, corpos d'água ou resíduos/poluição ambiental. 
+    Identifique se há sinais visíveis de poluição (como lixo, detritos, turbidez severa, espuma anormal, óleo ou despejos). 
+    Se for um copo d'água ou similar, aponte apenas o aspecto visual (se parece límpida ou com partículas). 
+    Seja objetivo e estruture a resposta de forma clara para um aplicativo socioambiental.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [prompt, imagePart],
+    });
+
+    res.json({ analysis: response.text });
+
+  } catch (error) {
+    console.error('Erro no proxy Gemini:', error);
+    res.status(500).json({ 
+      error: 'Erro ao analisar poluição com o Gemini', 
+      details: error.message 
     });
   }
 });
