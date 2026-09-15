@@ -14,8 +14,8 @@ const PLANTNET_API_KEY = '2b10dr8hlBbcNHFcHzzYGm9HR';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// Função auxiliar para tentar novamente caso dê erro 503 (alta demanda)
-async function generateWithRetry(modelName, contents, maxRetries = 3) {
+// Função auxiliar aprimorada para tentar novamente caso dê erro 503 ou indisponibilidade
+async function generateWithRetry(modelName, contents, maxRetries = 4) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await ai.models.generateContent({
@@ -24,12 +24,19 @@ async function generateWithRetry(modelName, contents, maxRetries = 3) {
       });
       return response;
     } catch (error) {
-      console.log(`Tentativa ${attempt} falhou. Erro:`, error.message);
-      if (attempt === maxRetries || (!error.message.includes('503') && !error.message.includes('UNAVAILABLE'))) {
+      const errorStr = JSON.stringify(error) + (error.message || '');
+      console.log(`Tentativa ${attempt} de ${maxRetries} falhou. Erro:`, errorStr);
+      
+      // Se esgotou as tentativas ou se o erro NÃO for de alta demanda/indisponibilidade, dispara o erro
+      const isHighDemand = errorStr.includes('503') || errorStr.includes('UNAVAILABLE') || errorStr.includes('high demand');
+      
+      if (attempt === maxRetries || !isHighDemand) {
         throw error;
       }
-      console.log(`Aguardando 2 segundos para tentar novamente...`);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Aguarda 3 segundos antes de tentar novamente para dar tempo do servidor do Google respirar
+      console.log(`Aguardando 3 segundos para tentar novamente...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
 }
@@ -67,7 +74,7 @@ app.post('/identify', upload.single('images'), async (req, res) => {
   }
 });
 
-// Nova rota para análise de poluição hídrica/ambiental via Gemini com proteção contra erro 503
+// Nova rota para análise de poluição hídrica/ambiental via Gemini com proteção aprimorada
 app.post('/pollution', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -86,7 +93,7 @@ app.post('/pollution', upload.single('image'), async (req, res) => {
     Se for um copo d'água ou similar, aponte apenas o aspecto visual (se parece límpida ou com partículas). 
     Seja objetivo e estruture a resposta de forma clara para um aplicativo socioambiental.`;
 
-    // Chamada protegida por tentativas automáticas usando o modelo compatível
+    // Chamada com o modelo gemini-3.6-flash e o novo sistema de tentativas otimizado
     const response = await generateWithRetry('gemini-3.6-flash', [prompt, imagePart]);
 
     res.json({ analysis: response.text });
