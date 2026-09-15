@@ -14,6 +14,26 @@ const PLANTNET_API_KEY = '2b10dr8hlBbcNHFcHzzYGm9HR';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
+// Função auxiliar para tentar novamente caso dê erro 503 (alta demanda)
+async function generateWithRetry(modelName, contents, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: contents,
+      });
+      return response;
+    } catch (error) {
+      console.log(`Tentativa ${attempt} falhou. Erro:`, error.message);
+      if (attempt === maxRetries || (!error.message.includes('503') && !error.message.includes('UNAVAILABLE'))) {
+        throw error;
+      }
+      console.log(`Aguardando 2 segundos para tentar novamente...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+}
+
 app.post('/identify', upload.single('images'), async (req, res) => {
   try {
     if (!req.file) {
@@ -47,7 +67,7 @@ app.post('/identify', upload.single('images'), async (req, res) => {
   }
 });
 
-// Nova rota para análise de poluição hídrica/ambiental via Gemini
+// Nova rota para análise de poluição hídrica/ambiental via Gemini com proteção contra erro 503
 app.post('/pollution', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -66,10 +86,8 @@ app.post('/pollution', upload.single('image'), async (req, res) => {
     Se for um copo d'água ou similar, aponte apenas o aspecto visual (se parece límpida ou com partículas). 
     Seja objetivo e estruture a resposta de forma clara para um aplicativo socioambiental.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [prompt, imagePart],
-    });
+    // Chamada protegida por tentativas automáticas usando o modelo compatível
+    const response = await generateWithRetry('gemini-1.5-flash', [prompt, imagePart]);
 
     res.json({ analysis: response.text });
 
