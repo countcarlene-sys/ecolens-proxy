@@ -87,7 +87,7 @@ app.post('/pollution', upload.single('image'), async (req, res) => {
     Seja objetivo e estruture a resposta de forma clara para um aplicativo socioambiental.`;
 
     // Chamada protegida por tentativas automáticas usando o modelo compatível
-    const response = await generateWithRetry('gemini-1.5-flash', [prompt, imagePart]);
+    const response = await generateWithRetry('gemini-2.5-flash', [prompt, imagePart]);
 
     res.json({ analysis: response.text });
 
